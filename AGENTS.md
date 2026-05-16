@@ -176,9 +176,23 @@ def send_imessage(recipient: str, message: str) -> str:
 User wants iMessage on server AI?
 ├── Has a Mac? → No → Suggest Twilio, stop.
 └── Has a Mac? → Yes
+    ├── Using OpenAI / Gemini / Ollama / non-Anthropic backend? → OpenClaw (Option A)
     ├── Needs two-way conversations / receive messages? → OpenClaw (Option A)
-    └── Just needs to send texts from existing agent? → Claude Code + MCP (Option B)
+    └── Anthropic only + just outbound sends + no gateway? → Claude Code + MCP (Option B)
 ```
+
+**OpenClaw supports any LLM provider** — set in `~/.openclaw/openclaw.json`:
+
+```json
+{ "agent": { "model": "anthropic/claude-sonnet-4-5" } }
+{ "agent": { "model": "openai/gpt-4o" } }
+{ "agent": { "model": "google/gemini-2.0-flash" } }
+{ "agent": { "model": "ollama/llama3.2" } }
+```
+
+Set the matching key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, or none for Ollama.
+
+**Claude Code + iMessage MCP is Anthropic-only.** Requires `ANTHROPIC_API_KEY`. If the user is on another provider, route them to Option A.
 
 ---
 

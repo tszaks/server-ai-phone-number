@@ -34,6 +34,7 @@ Your server AI connects to your Mac via SSH. The Mac runs `imsg` (or Claude Code
 - ✅ A Mac signed into iMessage (this is the only hard requirement — no Mac, no bridge)
 - ✅ A server running your AI (Linux VPS, cloud VM, etc.)
 - ✅ SSH access from server to Mac
+- ✅ An API key for whichever LLM provider you use (Anthropic, OpenAI, Gemini, Ollama, etc.)
 
 ---
 
@@ -65,12 +66,12 @@ imsg chats --limit 1
 sudo systemsetup -setremotelogin on
 ```
 
-### Step 3 — Server: Install OpenClaw
+### Step 3 — Server: Install OpenClaw + set your model
 
 ```bash
 # Requires Node.js 20+
 npx openclaw onboard
-# Follow the interactive wizard — it walks through gateway, workspace, and channel setup
+# Follow the interactive wizard — it walks through gateway, workspace, channel, and model setup
 ```
 
 Or manual install:
@@ -79,6 +80,44 @@ Or manual install:
 npm install -g openclaw
 openclaw --version
 ```
+
+OpenClaw supports any major provider — use whichever backend you already run:
+
+```json
+// ~/.openclaw/openclaw.json
+{
+  "agent": {
+    "model": "<provider>/<model-id>"
+  }
+}
+```
+
+**Common examples:**
+
+```json
+{ "agent": { "model": "anthropic/claude-sonnet-4-5" } }
+{ "agent": { "model": "openai/gpt-4o" } }
+{ "agent": { "model": "google/gemini-2.0-flash" } }
+{ "agent": { "model": "ollama/llama3.2" } }
+```
+
+Set the matching API key in your environment:
+
+```bash
+# Anthropic
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# OpenAI
+export OPENAI_API_KEY="sk-..."
+
+# Google Gemini
+export GOOGLE_GENERATIVE_AI_API_KEY="..."
+
+# Ollama (local, no key needed — just make sure Ollama is running)
+# ollama serve
+```
+
+Full model config: https://docs.openclaw.ai/concepts/models
 
 ### Step 4 — Server: Create SSH wrapper script
 
@@ -144,6 +183,8 @@ That's it. Your server AI now receives and responds to iMessages through your Ma
 ## Option B: Claude Code + iMessage MCP (Simple Outbound)
 
 Best for: existing AI agents (Hermes, LangChain, custom) that need to send outbound texts without a full OpenClaw setup.
+
+**Note:** This path uses Claude Code CLI specifically, so it requires an Anthropic API key. If you're on a different provider, use Option A (OpenClaw supports any model backend).
 
 **What you get:** Outbound sends only. No inbound listening. Simple, minimal dependencies.
 
@@ -229,13 +270,14 @@ ssh -i ~/.ssh/mac_bridge USERNAME@MAC_IP "echo connected"
 **Use OpenClaw if:**
 - You want two-way conversations (AI responds to incoming texts)
 - You need group chat, reactions, threaded replies
+- You're on OpenAI, Gemini, Ollama, or any non-Anthropic provider
 - You're building a full personal AI assistant
 - You want OpenClaw's skill system, scheduling, memory, etc.
 
 **Use Claude Code + iMessage MCP if:**
 - You just need to send outbound texts from your existing agent
 - You don't need inbound listening
-- You want minimal setup with no gateway to manage
+- You're already on Anthropic and want minimal setup with no gateway to manage
 
 ---
 
