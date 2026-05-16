@@ -2,6 +2,13 @@
 
 > Run your AI on a server? Have a Mac at home? You can give your server AI the ability to send and receive iMessages — your actual phone number, real SMS/iMessage.
 
+Two supported approaches:
+
+| Approach | Tool | Best for |
+|---|---|---|
+| **OpenClaw** (recommended) | `imsg` CLI + OpenClaw gateway | Full iMessage integration — receive, reply, react, groups |
+| **Claude Code + iMessage MCP** | `claude` CLI + MCP | Simple outbound-only sends from any AI agent |
+
 ---
 
 ## How It Works
@@ -9,8 +16,8 @@
 ```
 ┌─────────────────────┐        SSH        ┌─────────────────────┐
 │   Server AI         │ ───────────────▶  │   Your Mac          │
-│   (Hermes, Claude,  │                   │   Claude Code CLI   │
-│    any LLM agent)   │                   │   + iMessage MCP    │
+│   (OpenClaw,        │                   │   imsg CLI          │
+│    Hermes, custom)  │                   │   Messages.app      │
 └─────────────────────┘                   └─────────────────────┘
                                                      │
                                                      ▼
@@ -18,60 +25,78 @@
                                           (your real number)
 ```
 
-Your server AI SSH-es into your Mac. Your Mac runs a Claude Code CLI command with the iMessage MCP. The message goes out from your actual Apple ID — your real phone number.
+Your server AI connects to your Mac via SSH. The Mac runs `imsg` (or Claude Code + iMessage MCP) to send/receive messages through Messages.app — your actual Apple ID, your real phone number.
 
 ---
 
 ## Prerequisites
 
-- ✅ A Mac (this is the only hard requirement — no Mac, no bridge)
+- ✅ A Mac signed into iMessage (this is the only hard requirement — no Mac, no bridge)
 - ✅ A server running your AI (Linux VPS, cloud VM, etc.)
-- ✅ An Anthropic API key
+- ✅ SSH access from server to Mac
 
 ---
 
-## Setup: 3 Steps
+## Option A: OpenClaw (Recommended — Full iMessage)
 
-### Step 1 — Mac: Install Claude Code + iMessage MCP
+OpenClaw is an open source personal AI assistant with native iMessage support via `imsg`. When your gateway runs on Linux, you point it at a wrapper script that SSHes to your Mac and runs `imsg` there. This is OpenClaw's officially documented remote Mac path.
+
+**What you get:** Inbound + outbound messages, reactions, threaded replies, group chats, attachments. Full two-way integration.
+
+**Source:** [openclaw/openclaw](https://github.com/openclaw/openclaw) · [iMessage channel docs](https://docs.openclaw.ai/channels/imessage)
+
+### Step 1 — Mac: Install imsg
 
 ```bash
-# Install Claude Code CLI
-npm install -g @anthropic-ai/claude-code
+brew install steipete/tap/imsg
 
-# Install the iMessage MCP globally
-npm install -g imessage-mcp
+# Verify
+imsg --version
+imsg status --json
 
-# Set your API key (add to ~/.zshrc or ~/.bash_profile too)
-export ANTHROPIC_API_KEY="sk-ant-..."
-
-# Test it — send yourself a message
-claude -p "Use the imessage MCP to send a text to +1XXXXXXXXXX saying: test from AI"
+# Grant permissions (run these once interactively to trigger macOS prompts)
+# Full Disk Access + Automation required — approve in System Preferences when prompted
+imsg chats --limit 1
 ```
 
-> **iMessage MCP:** https://github.com/carterjackson/imessage-mcp  
-> Grants Claude access to Messages.app. You'll be prompted to allow Full Disk Access for the terminal.
-
----
-
-### Step 2 — Mac: Enable SSH Access from Your Server
+### Step 2 — Mac: Enable SSH
 
 ```bash
-# On your Mac — enable SSH
 sudo systemsetup -setremotelogin on
-
-# On your server — generate a key (if you don't have one)
-ssh-keygen -t ed25519 -C "server-ai" -f ~/.ssh/mac_bridge
-
-# Copy the public key to your Mac
-ssh-copy-id -i ~/.ssh/mac_bridge.pub your-mac-username@your-mac-ip-or-hostname
-
-# Test it from your server
-ssh -i ~/.ssh/mac_bridge your-mac-username@your-mac-ip "echo connected"
 ```
 
-**Tip:** Use DuckDNS (free) if your Mac's IP changes: https://www.duckdns.org
+### Step 3 — Server: Install OpenClaw
 
-Add to `~/.ssh/config` on your server:
+```bash
+# Requires Node.js 20+
+npx openclaw onboard
+# Follow the interactive wizard — it walks through gateway, workspace, and channel setup
+```
+
+Or manual install:
+
+```bash
+npm install -g openclaw
+openclaw --version
+```
+
+### Step 4 — Server: Create SSH wrapper script
+
+OpenClaw's remote Mac path works by pointing `cliPath` at a wrapper that SSHes to your Mac:
+
+```bash
+mkdir -p ~/.openclaw/scripts
+
+cat > ~/.openclaw/scripts/imsg-ssh << 'EOF'
+#!/usr/bin/env bash
+exec ssh -T mac-bridge imsg "$@"
+EOF
+
+chmod +x ~/.openclaw/scripts/imsg-ssh
+```
+
+Add `mac-bridge` to `~/.ssh/config` on your server:
+
 ```
 Host mac-bridge
   HostName your-mac-hostname-or-ip
@@ -79,79 +104,138 @@ Host mac-bridge
   IdentityFile ~/.ssh/mac_bridge
 ```
 
----
-
-### Step 3 — Server: Make Sure SSH Environment Has API Key
-
-By default, SSH sessions don't inherit your shell env. Fix it:
+Test the wrapper:
 
 ```bash
-# On your Mac — create ~/.ssh/environment (OpenSSH reads this for SSH sessions)
+~/.openclaw/scripts/imsg-ssh chats --limit 1
+```
+
+### Step 5 — Server: Configure OpenClaw iMessage channel
+
+In your OpenClaw config (usually `~/.openclaw/config.yaml` or `.json`):
+
+```json
+{
+  "channels": {
+    "imessage": {
+      "enabled": true,
+      "cliPath": "~/.openclaw/scripts/imsg-ssh",
+      "remoteHost": "your-mac-username@your-mac-ip",
+      "includeAttachments": true
+    }
+  }
+}
+```
+
+### Step 6 — Start and pair
+
+```bash
+openclaw gateway start
+
+# On first DM from a new contact, approve pairing:
+openclaw pairing list imessage
+openclaw pairing approve imessage <CODE>
+```
+
+That's it. Your server AI now receives and responds to iMessages through your Mac.
+
+---
+
+## Option B: Claude Code + iMessage MCP (Simple Outbound)
+
+Best for: existing AI agents (Hermes, LangChain, custom) that need to send outbound texts without a full OpenClaw setup.
+
+**What you get:** Outbound sends only. No inbound listening. Simple, minimal dependencies.
+
+### Step 1 — Mac: Install Claude Code + iMessage MCP
+
+```bash
+npm install -g @anthropic-ai/claude-code
+npm install -g imessage-mcp
+
+export ANTHROPIC_API_KEY="sk-ant-..."
+echo 'export ANTHROPIC_API_KEY="sk-ant-..."' >> ~/.zshrc
+
+# Grant Full Disk Access to Terminal in System Preferences → Privacy & Security
+```
+
+### Step 2 — Mac: Enable SSH + API key in environment
+
+```bash
+# Enable SSH
+sudo systemsetup -setremotelogin on
+
+# Make API key available to SSH sessions (SSH doesn't inherit shell env)
 echo "ANTHROPIC_API_KEY=sk-ant-..." >> ~/.ssh/environment
-
-# Enable PermitUserEnvironment in sshd_config on your Mac
 sudo sh -c 'echo "PermitUserEnvironment yes" >> /etc/ssh/sshd_config'
-sudo launchctl stop com.openssh.sshd
-sudo launchctl start com.openssh.sshd
+sudo launchctl stop com.openssh.sshd && sudo launchctl start com.openssh.sshd
 ```
 
----
-
-## Usage
-
-Once set up, your server AI can send a text in one command:
+### Step 3 — Server: Configure SSH access
 
 ```bash
-ssh mac-bridge "~/.local/bin/claude -p 'Use the imessage MCP to send a text to +1XXXXXXXXXX saying: Hello from your server AI.' 2>&1"
+ssh-keygen -t ed25519 -C "ai-mac-bridge" -f ~/.ssh/mac_bridge
+ssh-copy-id -i ~/.ssh/mac_bridge.pub USERNAME@MAC_IP
+
+cat >> ~/.ssh/config << 'EOF'
+Host mac-bridge
+  HostName MAC_IP_OR_HOSTNAME
+  User MAC_USERNAME
+  IdentityFile ~/.ssh/mac_bridge
+EOF
 ```
 
-Or with a contact name (iMessage resolves it from your Mac's contacts):
+### One-liner test (after setup)
 
 ```bash
-ssh mac-bridge "~/.local/bin/claude -p 'Use the imessage MCP to send a text to Mom saying: Hey, this is my AI.' 2>&1"
+ssh mac-bridge "~/.local/bin/claude -p 'Use the imessage MCP to send a text to +1XXXXXXXXXX saying: bridge is live.' 2>&1"
 ```
 
----
-
-## Integrating Into Your AI Agent
-
-### Python
+### Python integration
 
 ```python
 import subprocess
 
 def send_imessage(recipient: str, message: str) -> str:
-    """Send an iMessage via Mac bridge. recipient = phone number or contact name."""
     prompt = f"Use the imessage MCP to send a text to {recipient} saying: {message}"
     result = subprocess.run(
         ["ssh", "mac-bridge", f"~/.local/bin/claude -p '{prompt}' 2>&1"],
         capture_output=True, text=True, timeout=30
     )
     return result.stdout
-
-# Example
-send_imessage("+15551234567", "Your appointment is confirmed for tomorrow at 2pm.")
 ```
 
-### Hermes Agent (SKILL.md)
-
-If you're running [Hermes Agent](https://github.com/nousresearch/hermes), drop this into your skills:
-
-```yaml
----
-name: send-text
-description: "Send an iMessage or SMS via Mac bridge."
 ---
 
-## Workflow
-1. Parse recipient and message
-2. Confirm before sending
-3. Run:
+## SSH Key Setup (Both Options)
 
-ssh mac-bridge "~/.local/bin/claude -p 'Use the imessage MCP to send a text to [RECIPIENT] saying: [MESSAGE].' 2>&1"
+```bash
+# On your server — generate key
+ssh-keygen -t ed25519 -C "server-ai" -f ~/.ssh/mac_bridge
 
-4. Report result
+# Copy to Mac
+ssh-copy-id -i ~/.ssh/mac_bridge.pub USERNAME@MAC_IP
+
+# Test
+ssh -i ~/.ssh/mac_bridge USERNAME@MAC_IP "echo connected"
 ```
+
+**Tip:** Use [DuckDNS](https://www.duckdns.org) (free) if your Mac's IP changes.
+
+---
+
+## Which Option Should I Use?
+
+**Use OpenClaw if:**
+- You want two-way conversations (AI responds to incoming texts)
+- You need group chat, reactions, threaded replies
+- You're building a full personal AI assistant
+- You want OpenClaw's skill system, scheduling, memory, etc.
+
+**Use Claude Code + iMessage MCP if:**
+- You just need to send outbound texts from your existing agent
+- You don't need inbound listening
+- You want minimal setup with no gateway to manage
 
 ---
 
@@ -159,35 +243,38 @@ ssh mac-bridge "~/.local/bin/claude -p 'Use the imessage MCP to send a text to [
 
 | Problem | Fix |
 |---|---|
-| `claude: command not found` via SSH | Use full path: `~/.local/bin/claude` or `/usr/local/bin/claude` |
-| `ANTHROPIC_API_KEY not set` | Add to `~/.ssh/environment` on your Mac (see Step 3) |
-| `Permission denied (publickey)` | Run `ssh-copy-id` again; check `~/.ssh/authorized_keys` on Mac |
-| iMessage MCP not found | Run `npm install -g imessage-mcp`, then restart Claude |
-| Mac IP keeps changing | Use DuckDNS for a stable hostname |
-| Full Disk Access error | System Preferences → Privacy → Full Disk Access → add Terminal |
+| `imsg: command not found` via SSH | Install with `brew install steipete/tap/imsg`. Use full path if needed. |
+| `Full Disk Access` error | System Preferences → Privacy & Security → Full Disk Access → add Terminal.app |
+| `claude: not found` via SSH | Use full path: `~/.local/bin/claude`. Find with `ssh mac-bridge "which claude"` |
+| `ANTHROPIC_API_KEY` missing in SSH | Add to `~/.ssh/environment`, enable `PermitUserEnvironment yes` in sshd_config |
+| `Permission denied (publickey)` | Re-run `ssh-copy-id`. Check `~/.ssh/authorized_keys` on Mac. |
+| Mac IP keeps changing | Use DuckDNS for a stable hostname: https://www.duckdns.org |
+| Attachments not working (OpenClaw) | Set `remoteHost` and `remoteAttachmentRoots` in OpenClaw config |
+| OpenClaw pairing expired | Pairing requests expire after 1 hour — DM again to trigger a new one |
 
 ---
 
-## Why This Works (and Why It's Mac-Only)
+## Why Mac-Only?
 
-iMessage is Apple-exclusive. The only way to programmatically send iMessages on a non-jailbroken device is through Messages.app on macOS via AppleScript/SQLite — which is exactly what the iMessage MCP does. There is no API equivalent on Linux or Windows.
+iMessage is Apple-exclusive. The only way to programmatically send iMessages without jailbreaking is through Messages.app on macOS — which is what both `imsg` and the iMessage MCP do under the hood. There is no Linux/Windows equivalent.
 
-If you don't have a Mac, this doesn't apply to you. Consider Twilio for SMS instead.
+**No Mac?** Use [Twilio](https://twilio.com) for SMS (no iMessage, but no Mac required).
 
 ---
 
 ## Security Notes
 
-- Your Mac's SSH port should not be publicly exposed. Use a firewall and only whitelist your server's IP.
-- Rotate your SSH keys periodically.
-- The `~/.ssh/environment` file stores your API key in plaintext — make sure it's `chmod 600`.
-- Never commit your API key anywhere.
+- Don't expose Mac SSH to the public internet — whitelist your server's IP in your router/firewall
+- `~/.ssh/environment` stores API key in plaintext — `chmod 600 ~/.ssh/environment`
+- Rotate SSH keys periodically
+- Never commit API keys anywhere
+- OpenClaw's pairing system prevents unknown contacts from triggering your AI without approval
 
 ---
 
 ## Contributing
 
-PRs welcome. If you've got this working with a different AI framework or agent setup, add an integration example.
+PRs welcome. If you've got this working with a different AI framework, add an integration example under `examples/`.
 
 ---
 
