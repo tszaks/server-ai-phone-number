@@ -1,4 +1,4 @@
-# AGENTS.md — LLM Instructions for This Repo
+# AGENTS.md: instructions for AI agents
 
 > This file tells AI agents (Claude, Copilot, Cursor, OpenClaw, etc.) exactly what this repo does and how to help users set it up.
 
@@ -8,8 +8,8 @@
 
 This repo teaches how to bridge a **Linux server AI** to **iMessage** via a Mac, using one of two approaches:
 
-1. **OpenClaw** (full gateway with `imsg` CLI) — two-way iMessage, officially supported remote Mac path
-2. **Claude Code + iMessage MCP** — simple outbound-only sends from any existing AI agent
+1. **OpenClaw** (full gateway with `imsg` CLI) : two-way iMessage, officially supported remote Mac path
+2. **Claude Code + iMessage MCP** : simple outbound-only sends from any existing AI agent
 
 The Mac is the mandatory bridge in both cases. No Mac = no iMessage.
 
@@ -157,12 +157,15 @@ If that sends a text, the bridge is working.
 ### Python Integration
 
 ```python
+import shlex
 import subprocess
 
 def send_imessage(recipient: str, message: str) -> str:
     prompt = f"Use the imessage MCP to send a text to {recipient} saying: {message}"
+    # ssh runs this string in a shell on the Mac, so quote the prompt.
+    remote = f"~/.local/bin/claude -p {shlex.quote(prompt)} 2>&1"
     result = subprocess.run(
-        ["ssh", "mac-bridge", f"~/.local/bin/claude -p '{prompt}' 2>&1"],
+        ["ssh", "mac-bridge", remote],
         capture_output=True, text=True, timeout=30
     )
     return result.stdout
@@ -181,7 +184,7 @@ User wants iMessage on server AI?
     └── Anthropic only + just outbound sends + no gateway? → Claude Code + MCP (Option B)
 ```
 
-**OpenClaw supports any LLM provider** — set in `~/.openclaw/openclaw.json`:
+**OpenClaw supports any LLM provider** : set in `~/.openclaw/openclaw.json`:
 
 ```json
 { "agent": { "model": "anthropic/claude-sonnet-4-5" } }
@@ -206,18 +209,20 @@ Set the matching key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_
 | `ANTHROPIC_API_KEY not set` in SSH | Add to `~/.ssh/environment`, enable `PermitUserEnvironment yes` |
 | `Permission denied (publickey)` | Re-run `ssh-copy-id`, check `authorized_keys` on Mac |
 | Mac IP changes | Use DuckDNS: https://www.duckdns.org |
-| OpenClaw pairing expired | Pairing expires in 1h — trigger a new DM to get a fresh code |
+| OpenClaw pairing expired | Pairing expires in 1h : trigger a new DM to get a fresh code |
 | Attachments broken in OpenClaw | Set `remoteHost` and `remoteAttachmentRoots` in config |
 
 ---
 
 ## What Not to Do
 
-- Do not commit API keys
+- Do not commit API keys, SSH keys, phone numbers, hostnames, IP addresses or Apple IDs to this repo or any other. Use placeholders such as `MAC_USERNAME`, `MAC_IP_OR_HOSTNAME`, `+1XXXXXXXXXX` and `SERVER_IP` in examples.
+- Do not paste a user's real key, number or hostname into a chat, issue or pull request.
+- Do not tell a user to run `sudo` or edit `sshd_config` without saying what it changes. This bridge gives a server an SSH login to the Mac, read access to all Messages, and the power to send texts as the user (see README, Security).
 - Do not expose Mac SSH publicly without IP whitelisting
 - Do not run untrusted prompts through the bridge (it has Messages.app access)
 - Do not suggest workarounds before trying the documented path first
-- If user has no Mac: do not attempt to find alternatives that claim to work — they won't. Suggest Twilio.
+- If user has no Mac: do not attempt to find alternatives that claim to work : they won't. Suggest Twilio.
 
 ---
 
@@ -225,10 +230,17 @@ Set the matching key: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_GENERATIVE_
 
 ```
 server-ai-phone-number/
-├── README.md       ← Human-readable setup guide (both options)
-├── AGENTS.md       ← This file (LLM-optimized instructions)
-└── LICENSE
+├── README.md             Human-readable setup guide (both options) and Security section
+├── AGENTS.md             This file (instructions for AI agents)
+├── CONTRIBUTING.md       How to contribute to this guide
+├── SECURITY.md           How to report a problem, and what this bridge can access
+├── CHANGELOG.md
+├── CODE_OF_CONDUCT.md
+├── LICENSE
+└── .github/              Issue and pull request templates
 ```
+
+This repo contains no program code and has no tests. "Checking your work" means running the commands you changed against a scratch setup, or at least confirming every command and link still exists.
 
 ---
 
@@ -236,7 +248,7 @@ server-ai-phone-number/
 
 - OpenClaw repo: https://github.com/openclaw/openclaw
 - OpenClaw iMessage docs: https://docs.openclaw.ai/channels/imessage
-- imsg CLI: `brew install steipete/tap/imsg`
-- iMessage MCP: https://github.com/carterjackson/imessage-mcp
+- imsg CLI: `brew install steipete/tap/imsg` (source: https://github.com/openclaw/imsg)
+- iMessage MCP: https://github.com/anipottsbuilds/imessage-mcp
 - DuckDNS: https://www.duckdns.org
 - Twilio (no-Mac SMS alternative): https://twilio.com

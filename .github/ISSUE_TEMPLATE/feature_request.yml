@@ -1,0 +1,17 @@
+name: Suggestion
+description: Suggest an improvement to the guide
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is missing or unclear?
+      description: Describe the problem first. The fix can come after.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you add or change?
+    validations:
+      required: true
