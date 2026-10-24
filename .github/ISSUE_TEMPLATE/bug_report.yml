@@ -1,0 +1,42 @@
+name: Wrong or broken step
+description: A step, command or link in the guide does not work
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Do not paste real phone numbers, hostnames, IP addresses, Apple IDs or keys.** Replace them with placeholders.
+  - type: dropdown
+    id: option
+    attributes:
+      label: Which option?
+      options:
+        - "Option A: OpenClaw"
+        - "Option B: Claude Code + iMessage MCP"
+        - "SSH key setup"
+        - "Other"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: Which step, what you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "26.5"
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Server OS
+      placeholder: "Ubuntu 24.04"
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
